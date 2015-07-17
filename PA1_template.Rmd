@@ -1,25 +1,336 @@
 ---
-title: "Reproducible Research: Peer Assessment 1"
-output: 
+output:
   html_document:
     keep_md: true
 ---
+# Reproducible Research: Peer Assessment 1
 
+========================================
 
 ## Loading and preprocessing the data
 
+```{r setup, load and preprocess data}
+##I prefer to first tidy up the local environment by deleting all objects
+rm(list=ls())
+## Close graphics windows that might be open 
+graphics.off()      
 
+## Open a connection to the data on the website and download.
+## THIS MAY TAKE A FEW sECONDS. PLEASE BE PATIENT.
+
+url <- "http://d396qusza40orc.cloudfront.net/repdata%2Fdata%2Factivity.zip"
+download.file(url, "repdata-data-activity.zip", mode="wb")
+activity <- read.csv(unzip("repdata-data-activity.zip"), header=TRUE, stringsAsFactors=FALSE)
+
+## Create a POSIXlt variable named date
+date <- strptime(activity$date, "%Y-%m-%d") 
+```
 
 ## What is mean total number of steps taken per day?
 
+1. Calculate the total number of steps taken per day
 
+```{r use dplyr for aggregation }
+## use dplyr for aggregation
+library(dplyr)
+
+## Calculate the total number of steps taken per day
+dayGrouped <- activity %>% group_by(date)
+aggDataQ1 <- summarise(dayGrouped, totalSteps = sum(steps, na.rm =FALSE))
+```
+
+2. Make a histogram of the total number of steps taken each day
+
+```{r create histogram using ggplot2}
+#    Use ggplot2 to create the plot
+library(ggplot2)
+
+TSteps <- ggplot(aggDataQ1, aes(x = totalSteps))
+TSteps + geom_histogram(binwidth = 1000, color = "black", fill="#666633" ) +
+         labs(title = "Figure 1. Total Number of Steps Per Day Over Observation Period") +
+         labs(x = "Total Steps per Day") + labs(y = "Count of Days") +
+         geom_vline(aes(xintercept = mean(totalSteps, na.rm = T)), color = "red", linetype = "solid", size = 1) +
+         geom_vline(aes(xintercept = median(totalSteps, na.rm = T)), color = "black", linetype = "dashed", size = 1) +
+            theme(axis.title.x = element_text(face = "bold", size = 12),
+            axis.text.x = element_text(face = "bold", size = 12),
+            axis.title.y = element_text(face = "bold", size = 12),
+            axis.text.y = element_text(face = "bold", size = 12)) +
+            theme(axis.title.x = element_text(vjust = -0.5)) +
+            theme(axis.title.y = element_text(vjust = 1)) +
+            theme(plot.title = element_text(face = "bold", size = 12)) +
+            scale_y_continuous(breaks = c(1:12))
+```            
+
+
+3. Calculate and report the mean and median of the total number of steps taken per day
+   
+```{r }
+# mean
+round(mean(aggDataQ1$totalStep, na.rm =TRUE), digits = 2)
+# median
+median(aggDataQ1$totalStep, na.rm = TRUE)
+```
+
+The mean is 10766.19 and the median is 10765.  These results are also shown in Figure 1 where the mean is shown as a solid red line and the median is shown as a dashed black line. Because the mean is very close to the median, these two lines appear to be on top of each other.
 
 ## What is the average daily activity pattern?
 
+1. Make a time series plot (i.e. type = "l") of the 5-minute interval (x-axis) and the average number of steps taken, averaged across all days (y-axis)
 
+```{r use dplyr to calculate mean steps per interval}
+library(stringr) #Useful for working with strings
+Sys.setenv(TZ='GMT')  #Set time to Greenwich Mean Time (which is basically the same as UTC)
+
+# Aggregate (i.e., take the mean of) steps at the interval level
+intervalGrouped <- activity %>% group_by(interval)
+aggDataQ2 <- summarise(intervalGrouped, meanStep = mean(steps, na.rm = TRUE))
+
+#Create an interval variable that is padded from the left to be 4 digits in length
+aggDataQ2$intvPadded <- str_pad(aggDataQ2$interval, 4, pad="0")
+
+#Insert a colon after the second digit and place in new variable called "wColon"
+aggDataQ2$wColon <- gsub('^([0-9]{2})([0-9]+)$', '\\1:\\2', aggDataQ2$intvPadded)
+
+#Concatenate date and time
+aggDataQ2$date <-"2012-10-01"
+aggDataQ2$dateUlt <- paste(aggDataQ2$date, aggDataQ2$wColon)
+
+#Convert from character variable to POSIXct variable
+aggDataQ2$dtPOSIXct <- as.POSIXct(aggDataQ2$dateUlt)
+
+# extract time of POSIXct in hours as numeric value
+aggDataQ2$dtTime <- as.numeric(aggDataQ2$dtPOSIXct - trunc(aggDataQ2$dtPOSIXct, "days"))
+
+# Finally, convert dtTime to POSIXct variable. This gives a time interval variable ranging 
+# from 00:00:00 to 23:55:00. This also appends 1970-01-01 at the front as the date, but since 
+# we are only interesting in plotting interval as a proper time variable, the date is irrelevant
+# and does no display on the graph.
+class(aggDataQ2$dtTime) <- "POSIXct"
+
+## Create actual plot
+library(scales)  # package "scales" is useful for determining breaks and labels,
+                 # necessary here to properly format the intervals on the x-axis
+
+ggplot( data = aggDataQ2, aes(dtTime, meanStep )) + geom_line() +
+    geom_vline(aes(xintercept = 30900), color = "red", linetype = "solid", size = 1) +
+    labs(title = "Figure 2. Mean Number of Steps by Interval") +
+    labs(x = "Interval") + labs(y = "Mean Steps per Interval") +
+    theme(axis.title.x = element_text(face = "bold", size = 12),
+          axis.text.x = element_text(face = "bold", size = 11),
+          axis.title.y = element_text(face = "bold", size = 12),
+          axis.text.y = element_text(face = "bold", size = 12)) +
+    theme(axis.title.x = element_text(vjust = -0.5)) +
+    theme(axis.title.y = element_text(vjust = 1)) +
+    theme(plot.title = element_text(face = "bold", size = 12)) +
+    scale_x_datetime(labels = date_format("%H:%M"),
+                     breaks = date_breaks("2 hours")) #plots and labels dtTime (the interal variable)
+                                                      #as a proper time variable
+```
+
+2. Find the 5-minute interval containing the maximum average number of steps
+
+```{r }
+## First find maximum number of steps per interval
+max(aggDataQ2$meanStep, na.rm = TRUE)
+
+# Find which interval contains the maximum average number of steps
+aggDataQ2$dtTime[aggDataQ2$meanStep >= 206]
+# The maximum average number of steps are in the interval 8:35
+# Convert 8:35 to seconds and insert in the ggplot2 graph above where is is drawn as a red line
+8*60*60 + 35*60
+# the interval in seconds is 30900
+
+```
+
+The maximum average number is steps is 206.17. The interval containing the maximum number of steps is 835 (i.e., 8:35 a.m.). This information is also shown in Figure 2 by the solid red line.
 
 ## Imputing missing values
 
+1. Calculate and report the total number of missing values in the dataset (i.e. the total number of rows with NAs)
 
+```{r}
+sum(is.na(activity$steps))
+```
+
+The total number of missing values (all in the steps variable) is 2304.
+
+2. Devise a strategy for filling in all of the missing values in the dataset. 
+
+The strategy that I am going using to impute the missing data is to calculate the missing values by regressing steps on interval and day of week and plugging the missing steps with these predicted values. This is a simple additive regression model. First I will find all the factor levels with p < .05. Because the output from this regression analysis is rather lengthy, it is shown in the Appendix.
+
+```{r }
+## Run a preliminary regression
+## create a variable for day of week
+activity$dayofweek <- weekdays(date)
+
+## convert interval to a factor
+intervalFactor <- as.factor(activity$interval)
+
+## run  actual regression
+predSteps1 <- lm(steps ~ intervalFactor + dayofweek, data = activity)
+```
+
+Next I copied the interval variable into a new variable called intervalPlug and the dayofweek variable into a new variable called dayPlug. This leaves the original variables unchanged in case I need to use them later. I used the results of the regression above to find those factor levels that had p > 0.05 for both interval and day of week. I then recoded all of these levels with p > 0.05 to the reference factor level (i.e., interval = 5 and weekday = "Friday") in the new variables, which I used for the rest of the analyses. There are other ways to choose the best predictors such as using step wise methods but this way works too. Again, because the output of the regression procedure is rather lengthy, it is included in the Appendix.
+
+```{r}
+activity$intervalPlug <- activity$interval
+activity$intervalPlug[activity$interval <= 550 | activity$interval >= 1955] <-5
+activity$intervalPlug[activity$interval == 600] <-5
+activity$intervalPlug[activity$interval == 635] <-5
+activity$intervalPlug[activity$interval == 650] <-5
+activity$intervalPlug[activity$interval >= 940 & activity$interval <= 1005] <-5
+activity$intervalPlug[activity$interval == 1020] <-5
+activity$intervalPlug[activity$interval >= 1035 & activity$interval <= 1130] <-5
+activity$intervalPlug[activity$interval == 1140] <-5
+activity$intervalPlug[activity$interval >= 1235 & activity$interval <= 1245] <-5
+activity$intervalPlug[activity$interval == 1305] <-5
+activity$intervalPlug[activity$interval == 1315] <-5
+activity$intervalPlug[activity$interval == 1335] <-5
+activity$intervalPlug[activity$interval == 1340] <-5
+activity$intervalPlug[activity$interval >= 1420 & activity$interval <= 1445] <-5
+activity$intervalPlug[activity$interval >= 1500 & activity$interval <= 1515] <-5
+activity$intervalPlug[activity$interval == 1635] <-5
+activity$intervalPlug[activity$interval >= 1750 & activity$interval <= 1800] <-5 
+activity$intervalPlug[activity$interval >= 1920 & activity$interval <= 1945] <-5
+
+# Recode intervalPlug into a factor variable
+activity$intervalPlug <- as.factor(activity$intervalPlug)
+
+# Copy dayofweek into a new variable and put nonsignificant day of week factor levels into reference level (Friday)
+activity$dayPlug <- activity$dayofweek
+
+activity$dayPlug[activity$dayofweek == "Saturday" |
+                   activity$dayofweek == "Sunday" | 
+                   activity$dayofweek == "Wednesday"] <- "Friday"
+
+## Run the regression again and use the predicted values to plug the missing values
+predSteps2 <- lm(steps ~ intervalPlug + dayPlug, data = activity)
+```
+
+3. Create a new dataset that is equal to the original dataset but with the missing data filled in.
+
+```{r}
+### create a new variable called stepsHat that contains the predicted values
+activity$stepsHat <- round(predict(predSteps2, activity))
+
+## Loop through data to replace the missing values
+
+## First copy the steps variable into a new variable called stepsPlug that will have the missing values plugged with the predicted values (this leaves the original steps variable unchanged in case I want to use it again).
+activity$stepsPlug <- activity$steps
+
+## create logical variable called IsVarMiss to indicate whether steps are missing. The value of this variable will be TRUE if the value of step is missing and FALSE if the the step value is not missing.
+IsVarMiss <- is.na(activity$steps) 
+
+## Now do the actual looping through the length of the dataframe
+i=0
+for (i in seq_along(activity$steps)) {
+    if (IsVarMiss[i] == TRUE)                           # Check if missing. If it is missing, 
+        {activity$stepsPlug[i] <- activity$stepsHat[i]  # replace it with the predicted value.
+        }
+}
+
+# Make sure that zero is the smallest value for stepsPlug
+activity$stepsPlug[activity$stepsPlug < 0] <- 0
+
+```
+
+4. Make a histogram of the total number of steps per day across all days.
+   
+```{r}
+## Aggregate the plugged data
+dayGrouped <- activity %>% group_by(date)
+aggDataQ3 <- summarise(dayGrouped, totalStepP = sum(stepsPlug, na.rm= FALSE))
+
+## plot with imputed data
+PSteps <- ggplot(aggDataQ3, aes(x = totalStepP))
+PSteps + geom_histogram(binwidth = 1000, color = "black", fill = "#666633" ) +
+    labs(title = "Figure 3. Total Steps Per Day Over Observation Period Including Imputed Steps") +
+    labs(x = "Total Steps per Day") + labs(y = "Count of Days") +
+    geom_vline(aes(xintercept = mean(totalStepP, na.rm = T)), color = "red", linetype = "solid", size = 1) +
+    geom_vline(aes(xintercept = median(totalStepP, na.rm = T)), color = "black", linetype = "dashed", size = 1) +
+    theme(axis.title.x = element_text(face = "bold", size = 12),
+          axis.text.x = element_text(face = "bold", size=12),
+          axis.title.y = element_text(face="bold", size=12),
+          axis.text.y = element_text(face="bold", size=12)) +
+    theme(axis.title.x = element_text(vjust = -0.5)) +
+    theme(axis.title.y = element_text(vjust = 1)) +
+    theme(plot.title = element_text(face = "bold", size = 11)) +
+    scale_y_continuous(breaks = c(1:12))
+```
+
+Calculate and report the mean and median total number of steps taken per day.
+
+```{r}
+mean(aggDataQ3$totalStepP)
+median(aggDataQ3$totalStepP)
+```
+
+Using the imputed data, the mean increased to 10824.52 and the median increased to 11015. These results are also shown in Figure 3 where the mean is shown as a solid red line and the median is shown as a dashed black line. These are not huge differences from these statistics calculated on the original data and are mainly due to new steps per day around the original mean.
 
 ## Are there differences in activity patterns between weekdays and weekends?
+
+1. Create a new factor variable in the dataset with two levels - "weekday" and "weekend" indicating whether a given date is a weekday or weekend day.
+
+```{r  create day of week variables}
+## Create weekend variable
+dayofweek <- weekdays(date)
+weekend <- is.character("weekday")
+weekend[dayofweek != "Saturday" & dayofweek != "Sunday"] <- "weekday"
+weekend[dayofweek == "Saturday" | dayofweek == "Sunday"] <- "weekend"
+activity$weekend <- as.factor(weekend)
+```
+
+2. Make a panel plot containing a time series plot (i.e. type = "l") of the 5-minute interval (x-axis) and the average number of steps taken, averaged across all weekday days or weekend days (y-axis). 
+
+```{r compute mean and plot}
+##First aggegrate the plugged steps (i.e., including imputed values)by interval and weekend (weekday vs weekend)
+
+intervalGrouped <- activity %>% group_by(interval, weekend)
+aggDataQ4 <- summarise(intervalGrouped, meanStepP = mean(stepsPlug))
+
+# Pull out the inverval variable and the dtTime (interval converted to date format) from the earlier aggregation
+aggDataQ2Intvl <- subset(aggDataQ2, select = c(interval, dtTime))
+
+# append dtTime to the records created in aggDataQ4 by merging on "interval"
+aggDataQ4Intvl <- merge(aggDataQ4, aggDataQ2Intvl, by = "interval")
+
+## Make the final plot using facets to create two plots, one for weedays and one for weekends, in one column
+ggplot(aggDataQ4Intvl, aes(dtTime, meanStepP)) + geom_line() +
+    labs(title = "Figure 4. Mean Number of Steps by Interval Including Imputed Values") +
+    labs(x = "Interval") + labs(y = "Mean Steps per Interval") +
+    theme(axis.title.x = element_text(face = "bold", size = 12),
+          axis.text.x = element_text(face = "bold", size = 11),
+          axis.title.y = element_text(face = "bold", size = 12),
+          axis.text.y = element_text(face = "bold", size = 12)) +
+    theme(axis.title.x = element_text(vjust = -0.5)) +
+    theme(axis.title.y = element_text(vjust = 1)) +
+    theme(plot.title = element_text(face = "bold", size = 12)) +
+    scale_x_datetime(labels = date_format("%H:%M"), breaks = date_breaks("2 hours")) +
+    facet_wrap( ~ weekend, ncol = 1)
+```
+
+There appears to be more activity in the morning on weekdays than on weekends and conversely there is more activity later in the day and night on weekends than on weekdays. 
+
+Additional considerations for doing a thorough analysis are discussed at the end of the Appendix.
+
+The End.
+
+## Appendix
+
+```{r Print results of regression analysis}
+## Original regression analysis
+predSteps1 <- lm(steps ~ intervalFactor + dayofweek, data = activity)
+summary(predSteps1)
+
+## Regression analysis with recoded interval and day of week variables
+predSteps2 <- lm(steps ~ intervalPlug + dayPlug, data = activity)
+summary(predSteps2)
+```
+
+And last but not least, if this were a real study, I would explore with the client the two days that have the least number of steps (the two days with the smallest values in Figures 1 and 3). These have values of 41 and 126, respectively, which are much smaller than the next largest value of 2492. This suggests that either the person was bedridden those days, or he/she forgot to wear the device for most of those days. Depending on the circumstances, one might want to code these outliers as NA, or they may be legitimate values that should be included in the analyses.
+
+The following R code shows this in tabular form:
+
+```{r}
+table(aggDataQ1$totalSteps)
+```
